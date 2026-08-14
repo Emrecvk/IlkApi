@@ -1,52 +1,52 @@
+using Microsoft.EntityFrameworkCore;
+using IlkApi.Veri;
+using IlkApi.Modeller;
+
 var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.AddDbContext<UygulamaDbContext>(secenekler =>
+    secenekler.UseNpgsql(builder.Configuration.GetConnectionString("Varsayilan")));
 
 var app = builder.Build();
 
-var oyunlar = new List<Oyun>
+app.MapGet("/api/oyunlar", async (UygulamaDbContext db) =>
+    await db.Oyunlar.ToListAsync());
+
+app.MapGet("/api/oyunlar/{id:int}", async (int id, UygulamaDbContext db) =>
 {
-    new Oyun(1, "Hollow Knight", 2017, true),
-    new Oyun(2, "Vampire Survivors", 2022, true),
-    new Oyun(3, "Megabonk", 2025, false)
-};
-
-var sonrakiId = 4;
-
-// Hepsini getir
-app.MapGet("/api/oyunlar", () => oyunlar);
-
-// Tek kayıt getir
-app.MapGet("/api/oyunlar/{id:int}", (int id) =>
-{
-    var oyun = oyunlar.FirstOrDefault(o => o.Id == id);
-    return oyun is null
-        ? Results.NotFound()
-        : Results.Ok(oyun);
+    var oyun = await db.Oyunlar.FindAsync(id);
+    return oyun is null ? Results.NotFound() : Results.Ok(oyun);
 });
 
-// Yeni kayıt ekle
-app.MapPost("/api/oyunlar", (OyunGirdi girdi) =>
+app.MapPost("/api/oyunlar", async (OyunGirdi girdi, UygulamaDbContext db) =>
 {
     if (string.IsNullOrWhiteSpace(girdi.Ad))
         return Results.BadRequest("Ad bos olamaz.");
 
-    var yeni = new Oyun(sonrakiId++, girdi.Ad, girdi.CikisYili, girdi.Bitirdim);
-    oyunlar.Add(yeni);
+    var yeni = new Oyun
+    {
+        Ad = girdi.Ad,
+        CikisYili = girdi.CikisYili,
+        Bitirdim = girdi.Bitirdim
+    };
+
+    db.Oyunlar.Add(yeni);
+    await db.SaveChangesAsync();
 
     return Results.Created($"/api/oyunlar/{yeni.Id}", yeni);
 });
 
-// Sil
-app.MapDelete("/api/oyunlar/{id:int}", (int id) =>
+app.MapDelete("/api/oyunlar/{id:int}", async (int id, UygulamaDbContext db) =>
 {
-    var oyun = oyunlar.FirstOrDefault(o => o.Id == id);
-    if (oyun is null)
-        return Results.NotFound();
+    var oyun = await db.Oyunlar.FindAsync(id);
+    if (oyun is null) return Results.NotFound();
 
-    oyunlar.Remove(oyun);
+    db.Oyunlar.Remove(oyun);
+    await db.SaveChangesAsync();
+
     return Results.NoContent();
 });
 
 app.Run();
 
-record Oyun(int Id, string Ad, int CikisYili, bool Bitirdim);
 record OyunGirdi(string Ad, int CikisYili, bool Bitirdim);
