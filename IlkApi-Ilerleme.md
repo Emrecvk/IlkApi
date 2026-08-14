@@ -1,0 +1,432 @@
+# IlkApi — Proje Durumu ve Öğrenme Günlüğü
+
+**Son güncelleme:** 14 Ağustos 2026
+**Geliştirici:** Emre Çevik
+**Repo:** `git@github.com:Emrecvk/IlkApi.git`
+
+---
+
+## Asistan Rolü (gelecek oturumlar için)
+
+Bu dosyayı bağlam olarak alan asistan, aşağıdaki uzmanlık alanlarına sahip bir **backend + DevOps mentoru** olarak çalışır.
+
+### Backend
+- C# / .NET 10, ASP.NET Core, Minimal API, Controller tabanlı yapı
+- Entity Framework Core, LINQ, migration yönetimi, sorgu optimizasyonu
+- Katmanlı mimari, Dependency Injection, DTO tasarımı, servis soyutlaması
+- REST tasarımı, HTTP durum kodları, API sözleşmesi tasarımı
+- FluentValidation, merkezi hata yönetimi, yapılandırılmış loglama
+- Kimlik doğrulama ve yetkilendirme: JWT, BCrypt, OAuth2/OIDC, rol tabanlı erişim
+- Test: birim testi, entegrasyon testi, Testcontainers
+
+### Veritabanı
+- PostgreSQL: şema tasarımı, indeksleme, kısıtlar, sorgu planı okuma
+- İlişkisel modelleme, normalizasyon, transaction ve izolasyon seviyeleri
+- Migration stratejileri, geriye dönük uyumlu şema değişikliği
+
+### DevOps
+- Linux / Ubuntu sistem yönetimi, shell, systemd, izinler, ağ temelleri
+- Docker, Dockerfile, multi-stage build, imaj optimizasyonu, Docker Compose
+- CI/CD: GitHub Actions, otomatik test, build ve deploy hatları
+- Nginx / Caddy, reverse proxy, TLS sonlandırma
+- IaC: Terraform, Ansible
+- Gözlemlenebilirlik: yapılandırılmış log, Prometheus, Grafana, OpenTelemetry
+- Kubernetes, konteyner orkestrasyonu
+- Bulut: Azure ve AWS temel servisleri
+
+### Güvenlik
+- Gizli bilgi yönetimi (user-secrets, ortam değişkenleri, secret manager)
+- Şifre hashleme, token güvenliği, kullanıcı numaralandırma önleme
+- Bağımlılık güvenlik taraması, tedarik zinciri riski
+
+### Çalışma tarzı
+- Adım adım ilerle, her adımın **neden** yapıldığını açıkla
+- Zorluk seviyesi hakkında dürüst ol, "kolay" deyip geçme
+- Belirli aralıklarla kavramsal özet ver
+- Kod profesyonel standartta olsun, yapay stil kısıtı koyma
+- Türkçe iletişim, Türkçe değişken/sınıf adları (proje konvansiyonu)
+- Kullanıcı kısa yanıt verir ("devam", "tamam") — bu ilerleme onayıdır
+- Kavramsal olarak yanlış gelen bir şey olursa kullanıcı hemen itiraz eder, bu beklenen davranış
+
+---
+
+## Proje Özeti
+
+**IlkApi** — oyun kütüphanesi / backlog takip uygulamasının backend REST API'si.
+
+Amaç: backend fundamentals'ı sıfırdan, gerçek bir proje üzerinde öğrenmek. Her yeni konu bu projeye eklenerek öğreniliyor; her hafta yeni proje açılmıyor.
+
+### Kariyer bağlamı
+- **Hedef:** Full stack / DevOps (%70-75 ağırlık)
+- **Hobi:** 3D oyun geliştirme, Unity/C# (%25-30 ağırlık)
+- **Zaman:** Haftada 10-20 saat
+- **Strateji:** "Junior DevOps" pozisyonu neredeyse yok. Önce **altyapıdan anlayan backend developer** olarak sektöre gir, 2-3 yıl sonra platform/DevOps tarafına kay.
+- **Stack kararı:** C# / .NET (Unity'den gelen C# birikimi + Türkiye'de kurumsal iş hacmi)
+
+---
+
+## Ortam
+
+| Bileşen | Sürüm / Detay |
+|---|---|
+| İşletim sistemi | Windows + WSL2 |
+| Dağıtım | Ubuntu 26.04 LTS (Resolute Raccoon) |
+| .NET SDK | 10.0.x (LTS) — Ubuntu kendi deposundan |
+| Veritabanı | PostgreSQL 17-alpine (Docker container) |
+| Editör | VS Code + WSL uzantısı + C# eklentisi |
+| Proje yolu | `~/projeler/IlkApi` |
+| Geliştirme portu | `5144` |
+
+### Önemli ortam kararları
+
+- **Dual boot yerine WSL2.** Reboot maliyeti, parça parça çalışma temposunu öldürür. Asıl Linux öğrenimi VPS üzerinde olacak. İleride derinlik gerekirse VM (snapshot avantajı) tercih edilecek, dual boot değil.
+- **Docker Desktop değil, Ubuntu'ya doğrudan Docker.** Ekstra katman yok, sunucu ortamına daha benzer, lisans sorusu yok.
+- **Projeler `/mnt/c` altında değil, Linux tarafında.** WSL dosya sistemi köprüsü yavaş.
+- **C# Dev Kit kaldırıldı**, sade C# eklentisi bırakıldı. Dev Kit solution tabanlı çalışıp WSL senaryolarında Windows `dotnet.exe`'yi çağırıyor.
+
+---
+
+## Kurulu Paketler ve Araçlar
+
+### Sistem (apt)
+`git`, `curl`, `wget`, `build-essential`, `unzip`, `dotnet-sdk-10.0`, Docker (`docker-ce`, `docker-compose-plugin`)
+
+### .NET global tool
+`dotnet-ef` (PATH'e `~/.dotnet/tools` eklendi, `~/.bashrc` üzerinden)
+
+### NuGet paketleri
+| Paket | Sürüm | Amaç |
+|---|---|---|
+| `Npgsql.EntityFrameworkCore.PostgreSQL` | — | EF Core PostgreSQL sağlayıcısı |
+| `Microsoft.EntityFrameworkCore.Design` | — | Migration araçları |
+| `FluentValidation.DependencyInjectionExtensions` | 12.0.0 | Doğrulama |
+| `Microsoft.AspNetCore.Authentication.JwtBearer` | 10.0.0 | JWT doğrulama |
+| `BCrypt.Net-Next` | 4.0.3 | Şifre hashleme |
+
+### Kaldırılan paketler
+`Microsoft.OpenApi` ve `Microsoft.AspNetCore.OpenApi` — source generator uyumsuzluğu (CS0200) ve güvenlik açığı (NU1903). İleride Scalar ile birlikte, sürümler eşleştirilerek geri eklenecek.
+
+---
+
+## Proje Yapısı
+
+```
+IlkApi/
+├── IlkApi.csproj
+├── Program.cs                  # DI kayıtları + middleware + endpoint bağlama
+├── compose.yaml                # PostgreSQL container tanımı
+├── .env                        # Gizli değerler (gitignore'da)
+├── .gitignore
+├── Modeller/
+│   ├── Oyun.cs                 # Veritabanı entity'si
+│   └── Kullanici.cs            # Eposta + SifreHash
+├── Veri/
+│   └── UygulamaDbContext.cs    # DbSet'ler + OnModelCreating
+├── Dto/
+│   ├── OyunDto.cs              # OyunOku, OyunYaz
+│   ├── AuthDto.cs              # KayitIstek, GirisIstek, TokenYanit
+│   └── Dogrulayicilar/
+│       ├── OyunYazDogrulayici.cs
+│       └── KayitIstekDogrulayici.cs
+├── Servisler/
+│   ├── IOyunServisi.cs / OyunServisi.cs
+│   ├── IAuthServisi.cs / AuthServisi.cs
+│   └── ITokenServisi.cs / TokenServisi.cs
+├── Endpointler/
+│   ├── OyunEndpointleri.cs
+│   └── AuthEndpointleri.cs
+├── Ortak/
+│   ├── HataYaniti.cs
+│   ├── DogrulamaFiltresi.cs    # Generic IEndpointFilter
+│   └── GlobalHataYakalayici.cs # IExceptionHandler
+└── Migrations/
+    ├── ..._IlkOlusturma.cs
+    └── ..._KullaniciEklendi.cs
+```
+
+### Katman sorumlulukları
+
+| Katman | Sorumluluk | Bilmediği şey |
+|---|---|---|
+| **Endpoint** | HTTP: rota, durum kodu, gövde | İş kuralları, SQL |
+| **Servis** | İş kuralları, doğrulama, dönüşüm | HTTP diye bir şey olduğu |
+| **DbContext** | Veri erişimi | İş kuralları |
+
+**Bağımlılık tek yöne akar:** Endpoint → Servis → DbContext. Servis, endpoint'i bilmez.
+
+---
+
+## Tamamlanan Aşamalar
+
+### Faz 0 — Ortam Kurulumu ✅
+
+WSL2 + Ubuntu, sistem güncelleme, temel araçlar, Git kimliği, SSH anahtarı (Ed25519), GitHub bağlantısı, .NET SDK.
+
+**Öğrenilenler:** kernel/dağıtım ayrımı, `apt` yaşam döngüsü, root vs sudo, `~` kullanıcıya göre değişir, asimetrik şifreleme, `>` ile `>>` farkı, `~/.bashrc` ve PATH.
+
+### Faz 1 — İlk API (bellek içi) ✅
+
+`dotnet new webapi` → şablon temizlendi → kendi endpoint'leri yazıldı. GET (liste), GET (tek), POST, DELETE. `Results` ile açık durum kodu kontrolü.
+
+**Öğrenilenler:** Kestrel, Minimal API, `builder` / `Build()` / `Run()` üçlüsü, middleware kavramı, route constraint (`{id:int}`), model binding, serileştirme (PascalCase → camelCase), `record`, top-level statements, DTO'nun ilk gerekçesi (Id'yi sunucu üretir).
+
+**Kritik deneyim:** `dotnet run` sonrası eklenen kayıt, uygulama yeniden başlayınca kayboldu. Kalıcılık ihtiyacı teoriden değil deneyimden öğrenildi.
+
+### Faz 2 — Kalıcılık (PostgreSQL + EF Core) ✅
+
+DbContext, DbSet, connection string (user-secrets), ilk migration, `dotnet ef database update`.
+
+**Öğrenilenler:** ORM kavramı, `DbContext` yaşam döngüsü, `DbSet<T>`, migration'ın `Up()`/`Down()` yapısı, `__EFMigrationsHistory` tablosu, `SaveChangesAsync()` olmadan verinin sessizce kaydolmaması, `async/await` (Flutter `Future` karşılığı), DI'ın ilk gerçek kullanımı, **gizli bilgi asla koda girmez**.
+
+### Faz 3 — Katmanlı Mimari ✅
+
+`Program.cs` üç katmana ayrıldı: DTO, servis (interface + implementasyon), endpoint (extension method + `MapGroup`).
+
+**Öğrenilenler:** Dependency Inversion (somut sınıfa değil sözleşmeye bağlanmak), model ve DTO ayrımı, projeksiyon (`.Select()` ToList'ten önce → SQL'e çevrilir), servis katmanının HTTP bilmemesi (`bool` döner, 404'ü endpoint çevirir), DI yaşam süreleri:
+
+| Kayıt | Ömür | Kullanım |
+|---|---|---|
+| `AddScoped` | Her HTTP isteği | Veritabanına dokunan her şey |
+| `AddSingleton` | Uygulama boyunca | Durumsuz, pahalı nesneler |
+| `AddTransient` | Her istendiğinde | Hafif, durumsuz |
+
+**Refactoring tanımı:** dışarıdan görünen davranışı değiştirmeden iç yapıyı iyileştirmek. Aynı curl çıktısını almak başarı göstergesidir.
+
+### Faz 4 — Doğrulama ve Hata Yönetimi ✅
+
+FluentValidation, generic `DogrulamaFiltresi<T>` (`IEndpointFilter`), `GlobalHataYakalayici` (`IExceptionHandler`), tutarlı `HataYaniti` formatı.
+
+**Öğrenilenler:** doğrulama sınırda yapılır, tüm hatalar birlikte döner (kullanıcı formu 4 kez göndermesin), **hatanın tamamı loga / istemciye genel mesaj** (stack trace sızdırma), yapılandırılmış loglama (`{Yol}` ayrı alan olarak), `UseExceptionHandler` middleware zincirinin en başında olmalı, sunucuda her zaman `DateTime.UtcNow`.
+
+**Şifre politikası notu:** Sadece minimum uzunluk kondu, karmaşıklık kuralı konmadı. Modern rehberler (NIST dahil) karmaşıklık zorunluluğundan vazgeçti — insanları `Parola123!` gibi tahmin edilebilir kalıplara itiyor.
+
+### Faz 5 — Kimlik Doğrulama ✅
+
+Kullanıcı modeli, BCrypt hashleme, JWT üretimi ve doğrulaması, `RequireAuthorization()` ile korumalı endpoint'ler.
+
+**Öğrenilenler:**
+- **Authentication (401) vs Authorization (403)** ayrımı
+- JWT **imzalı, şifreli değil** — jwt.io'da içeriği okunabilir, hassas bilgi konmaz
+- Stateless doğrulama → ölçeklenebilirliğin temeli; bedeli: token iptal edilemez (bu yüzden kısa ömür + refresh token)
+- **BCrypt neden SHA256 değil:** SHA256 hızlı olmak için tasarlandı, şifre için felaket. BCrypt kasıtlı yavaş, maliyeti ayarlanabilir, her şifreye rastgele salt ekler
+- **Kullanıcı numaralandırma önleme:** "kullanıcı yok" ile "şifre yanlış" ayrımı yapılmaz. GitHub'ın "Repository not found" mesajıyla aynı prensip
+- **Race condition:** kodda "bu eposta var mı" kontrolü yetmez, unique index veritabanı seviyesinde olmalı
+- `UseAuthentication` mutlaka `UseAuthorization`'dan **önce** — ters yazılırsa sessizce yanlış çalışır
+- `SifreHash` alanı DTO ayrımının gerçek gerekçesini gösterdi
+
+**Bilerek eksik bırakılanlar:** refresh token, brute-force koruması (rate limit), eposta doğrulama, şifre sıfırlama, rol tabanlı yetkilendirme.
+
+### Faz 6 — Docker (kısmen) 🔄
+
+PostgreSQL container'a alındı (`compose.yaml`). Uygulamanın kendisi henüz container'da değil.
+
+**Öğrenilenler:**
+- **Container ≠ VM:** container host kernel'ini paylaşır (namespace + cgroup ile izolasyon), VM'in kendi kernel'i vardır
+- **Volume:** container dosya sistemi geçicidir, volume kalıcıdır → *durumsuz uygulama, durumlu depolama*. Faz 2'de öğrenilen ayrımın altyapı karşılığı
+- `restart: unless-stopped` → `sudo service postgresql start` derdi bitti
+- `ports: "host:container"` eşlemesi
+- `healthcheck` — container ayakta olmak ≠ servis hazır olmak
+- **İmaj sürümü sabitlenir**, `latest` kullanılmaz
+- GPG anahtarı + depo imzası: rastgele depo eklemek, o deponun sahibine root yetkisi vermektir
+- `docker` grubuna üyelik pratikte root yetkisidir
+- **`compose.yaml` belge değil, çalıştırılabilir tanım** → Infrastructure as Code'un en basit hali
+
+---
+
+## Çözülen Hatalar ve Çıkarılan Dersler
+
+Bu bölüm en değerli kısım — hata ayıklama refleksleri burada oluştu.
+
+| # | Belirti | Kök sebep | Ders |
+|---|---|---|---|
+| 1 | PowerShell'de `curl -i` çalışmadı, `Uri:` sordu | PowerShell'de `curl`, `Invoke-WebRequest` takma adı | Komut beklenmedik davranıyorsa gerçekte ne olduğunu sor: `type curl` / `Get-Command curl` |
+| 2 | Yeni endpoint 404 döndü | Kod düzenlendi ama uygulama yeniden başlatılmadı | `dotnet watch run` kullan (Flutter hot reload karşılığı) |
+| 3 | `cd ~/projeler` → "No such file or directory" | root olarak girilmişti, `~` = `/root` | `~` sabit değil, kullanıcıya göre değişir. Prompt'ta `#` root, `$` normal kullanıcı |
+| 4 | `Repository not found` | GitHub'da repo hiç açılmamıştı | GitHub, olmayan repo ile erişilemeyen repoyu **kasten** aynı raporlar — bilgi sızıntısı önleme |
+| 5 | `CS0234: namespace 'Endpointler' does not exist` | Namespace klasörden değil, dosya içindeki `namespace` satırından gelir | C#'ta yol değil namespace bağlar |
+| 6 | `CS0200: IOpenApiMediaType.Example is read only` | Source generator ile paket sürümü uyuşmazlığı | **`obj/` veya `bin/` içindeki hata asla senin kodun değildir.** `rm -rf obj bin` → yeniden dene. Ve **sürüm belirtmeden paket ekleme** |
+| 7 | POST'ta 500 | `IValidator<OyunYaz>` DI'da kayıtlı değil | **Derleme hatası vs çalışma zamanı hatası:** DI çalışma anında çözülür. Yeni interface yazdıysan kaydını aynı anda yaz |
+| 8 | `CS1061: DbContext does not contain 'Oyunlar'` | DbContext düzenlenirken mevcut `DbSet` üzerine yazıldı | Hata mesajındaki **tipe** git, bahsedilen üyeyi ara |
+| 9 | VS Code "No .NET SDKs were found" | VS Code Windows tarafında çalışıyordu, WSL'e bağlı değildi | **Yollara bak:** `C:\...` → Windows süreci, `/home/...` → Linux süreci. Karıştıysa yapılandırma yanlış |
+| 10 | `28P01: password authentication failed` | user-secrets'ta `1234`, compose'da `gizli123` | Aynı değer iki yerde tanımlıysa er geç ayrışır → `.env` ile tek kaynak |
+
+### Genel hata ayıklama prensipleri
+
+1. **Kırmızı çıktı her zaman hata değildir.** Log seviyesine (`fail` / `warn` / `info`) ve akışın sonucuna bak. İlk migration'da `__EFMigrationsHistory` sorgusunun başarısız olması normaldir — `Done.` satırı asıl sonuçtur.
+2. **Katman katman daralt.** `28P01` teşhisinde kullanılan sıra: sunucu çalışıyor mu → içeriden bağlanabiliyor muyum → dışarıdan bağlanabiliyor muyum → istemci hangi kimlik bilgisini gönderiyor?
+3. **Terminal her zaman doğruyu söyler, editör söylemeyebilir.** `dotnet build` temizse editör yanılıyordur.
+4. **Hata mesajının şablonunu tanı.** `.NET` DI hatası her zaman şu kalıptadır: *X'i üretmek istedim, Y'ye ihtiyacı vardı, Y kayıtlı değil.*
+5. **Araç zincirinde takıldığında "bu beni gerçekten bloke ediyor mu" diye sor.** Etmiyorsa not al, devam et. Yoksa gün araç ayarıyla geçer.
+
+---
+
+## Sık Kullanılan Komutlar
+
+### Günlük akış
+```bash
+cd ~/projeler/IlkApi
+docker compose up -d          # veritabanini kaldir
+dotnet watch run              # uygulamayi izleme modunda calistir
+```
+
+### .NET
+```bash
+dotnet build
+dotnet run
+dotnet watch run
+dotnet add package <Paket> --version <Surum>
+dotnet list package --vulnerable --include-transitive
+dotnet clean && rm -rf obj bin
+```
+
+### EF Core
+```bash
+dotnet ef migrations add <Ad>
+dotnet ef migrations script        # uretilecek SQL'i gor
+dotnet ef database update
+dotnet ef migrations remove        # son migration'i geri al (uygulanmamissa)
+```
+
+### Docker
+```bash
+docker compose up -d
+docker compose ps
+docker compose logs -f veritabani
+docker compose down                # container'lari durdur (VERI KALIR)
+docker compose down -v             # volume'leri de sil (VERI GIDER — dikkat)
+docker exec -it ilkapi-db psql -U emre -d oyunkutuphanesi
+docker volume ls
+```
+
+### Gizli bilgi
+```bash
+dotnet user-secrets list
+dotnet user-secrets set "Anahtar" "Deger"
+openssl rand -base64 48            # JWT anahtari uret
+```
+
+### Test kalıpları
+```bash
+# Durum kodunu gormek icin -i
+curl -i http://localhost:5144/api/oyunlar/1
+
+# Token alip degiskene atma
+TOKEN=$(curl -s -X POST http://localhost:5144/api/auth/giris \
+  -H "Content-Type: application/json" \
+  -d '{"eposta":"emre@ornek.com","sifre":"uzunbirsifre123"}' \
+  | python3 -c "import sys,json; print(json.load(sys.stdin)['token'])")
+
+# Korumali endpoint'e istek
+curl -i -X POST http://localhost:5144/api/oyunlar \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"ad":"Celeste","cikisYili":2018,"bitirdim":false}'
+```
+
+---
+
+## Kavram Sözlüğü
+
+**Linux / sistem:** kernel, dağıtım, shell/bash, root vs sudo, apt, paket deposu, PATH, `~`, mutlak/göreli yol, systemd, GPG imzası
+
+**Git / SSH:** repository, commit, branch, remote, asimetrik şifreleme, Ed25519, `known_hosts`, `.gitignore`
+
+**.NET:** SDK vs runtime, LTS, `.csproj`, NuGet, ASP.NET Core, Kestrel, Minimal API, middleware, Dependency Injection, top-level statements, `record`, serileştirme, source generator, extension method, generic
+
+**Web / HTTP:** GET/POST/PUT/DELETE, durum kodları (200/201/204/400/401/403/404/409/500), endpoint, route, route constraint, model binding, JSON, REST, OpenAPI, CORS, localhost/port
+
+**Veritabanı:** ORM, DbContext, DbSet, migration, connection string, birincil anahtar, unique index, projeksiyon, race condition, transaction
+
+**Güvenlik:** hash vs şifreleme, salt, BCrypt, JWT, claim, bearer token, kullanıcı numaralandırma, gizli bilgi yönetimi, bağımlılık açığı (CVE)
+
+**Docker:** imaj, container, katman, volume, bind mount, namespace, cgroup, Compose, healthcheck, port eşleme, registry
+
+**Mimari:** katmanlı mimari, DTO, Dependency Inversion, refactoring, stateless/stateful, Infrastructure as Code
+
+---
+
+## Sıradaki Adımlar
+
+### Hemen sırada
+1. **Uygulamayı container'a al** — Dockerfile, multi-stage build (SDK ile derle, runtime ile çalıştır), imaj katmanları
+2. **Container ağı** — connection string `localhost` olmaktan çıkacak, servis adı (`veritabani`) kullanılacak. Container içinden `localhost` container'ın kendisidir
+3. **`.env` ile tek kaynak** — compose ve uygulama aynı değerleri okusun
+4. **Ortam ayrımı** — `ASPNETCORE_ENVIRONMENT`, Development vs Production davranış farkı
+
+### Yakın vadede
+- Testler: birim testi + Testcontainers ile entegrasyon testi
+- Kullanıcıya ait oyun listesi (ilişkisel modelleme, foreign key, `Include`)
+- Sayfalama, filtreleme, sıralama
+- Rate limiting, CORS
+- Scalar ile API dokümantasyonu (OpenAPI'yi sürüm uyumlu şekilde geri ekle)
+- Refresh token
+
+### DevOps merdiveni — kalan basamaklar
+1. ~~Linux + shell~~ ✅
+2. ~~Git~~ ✅
+3. **Bir uygulamayı elle VPS'e at** ← atlandı, geri dönülmeli (Hetzner ~€4/ay veya Oracle free tier)
+4. Nginx/Caddy + TLS + systemd service
+5. ~~Docker~~ 🔄 (yarısı bitti)
+6. CI/CD: GitHub Actions — push'ta test + build + deploy
+7. Observability: yapılandırılmış log, Prometheus + Grafana
+8. IaC: Terraform + Ansible
+9. Kubernetes — **EN SON.** 1-8 olmadan K8s öğrenmek zaman israfı
+10. Bulut derinliği: Azure (.NET tarafı) + sertifika (AZ-104)
+
+**Prensip:** Her aracı, o aracın çözdüğü acıyı bizzat çektikten sonra öğren. Sırayı bozmak kavramları ezbere dönüştürür.
+
+---
+
+## 12 Aylık Takvim
+
+| Dönem | Odak |
+|---|---|
+| **Ay 1-3** | .NET Web API, EF Core, PostgreSQL, auth. Paralelde Linux + Git. Çıktı: gerçek bir CRUD+auth uygulaması |
+| **Ay 4-6** | React/TS ile frontend. VPS'e elle deploy → Nginx → Docker → GitHub Actions |
+| **Ay 7-9** | Terraform/Ansible, monitoring, bulut sağlayıcı, Go temelleri |
+| **Ay 10-12** | Kubernetes, uçtan uca portfolyo projesi, sertifika |
+
+**Not:** Ay 1'in ilk haftasındayız ve Faz 0-5 zaten bitti. Tempo planın önünde.
+
+---
+
+## Öğrenme Yöntemi
+
+1. **Tutorial cehennemine girme.** 40 saatlik kursu baştan sona izlemek öğrenme değil, öğrenme hissi. Oran **%20 izleme, %80 yazma** olsun.
+2. **Kavramı öğrenmek için değil, projeyi ilerletmek için kaynağa git.** "EF Core öğreneceğim" diye oturma; "bu listeyi veritabanından çekmem lazım" de, tıkan, sonra sadece o kısmın dokümanını oku.
+3. **Tek proje, 3 ay.** IlkApi büyüsün. Her hafta yeni proje açmak en yaygın ilerleme yanılsaması.
+
+### Kaynaklar
+- **Linux:** MIT *The Missing Semester of Your CS Education*, OverTheWire Bandit (0-25 arası hedef)
+- **.NET:** Microsoft Learn (ana kaynak), Nick Chapsas (YouTube)
+- **Harita:** roadmap.sh — **müfredat değil, harita olarak kullan**
+
+### Bedava kaldıraç
+Stajda deployment sürecine dokunmayı iste. "Pipeline'a bakabilir miyim, ortam kurulumunda yardım edebilir miyim." Gerçek üretim altyapısına dokunmak, evde kurulan 10 lab'a bedeldir.
+
+---
+
+## Oyun Tarafı (haftada ~4 saat)
+
+**Öncelik: staj projesindeki 2D metroidvania'yı bitir.** 3D'ye atlamak, yarım kalmış iki proje + tamamlanmış sıfır proje demek. Mevcut 2D projede hareket, animasyon ve kamera sistemleri çalışıyor — bitirmek "3D denedim"den kat kat değerli.
+
+### 3D'ye geçince asıl boşluklar (2D'den taşınmayanlar)
+- 3D matematik: vektörler, quaternion, dünya/yerel uzay dönüşümleri
+- Aydınlatma ve materyal: bake, probe, PBR
+- Asset pipeline: Blender'da basit modelleme, UV, import ayarları — çoğu programcının duvara tosladığı yer
+- Performans: draw call, LOD, culling
+
+**Yaklaşım:** Büyük 3D proje başlatma. 1-2 haftalık "dikey dilim"ler yap — bir FPS kontrolcüsü, bir gün-gece döngüsü, bir envanter. Her biri bitmiş ve öğretici.
+
+### İki yolun kesişimi
+Oyuna leaderboard + bulut kayıt senkronu ekle. Tek özellik, ama gerçek bir backend + gerçek API tasarımı + gerçek deploy problemi verir. Unity build'ini GitHub Actions'ta almak da iyi bir CI egzersizi — ama lisanslama sorunları yüzünden acı verici, 7-8. aya saklanmalı.
+
+---
+
+## Güvenlik Notları
+
+- `.env` **asla** Git'e girmez. Yanına `.env.example` konur (aynı anahtarlar, sahte değerler)
+- `compose.yaml` içindeki geliştirme şifresi Git'e gitmiş durumda — kritik değil ama değişkenlere taşınmalı
+- Production'da user-secrets kullanılmaz; ortam değişkeni veya secret manager devreye girer
+- JWT anahtarını ele geçiren, istediği kullanıcı adına token üretebilir
+- `docker compose down -v` production'da kariyerin en pahalı yazım hatası olabilir
