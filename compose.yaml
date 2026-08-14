@@ -8,6 +8,8 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
     ports:
+      # Host'a aciliyor cunku 'dotnet ef' ve psql disaridan baglaniyor.
+      # Uygulama artik buna ihtiyac duymuyor: container agi uzerinden konusuyor.
       - "5432:5432"
     volumes:
       - pgveri:/var/lib/postgresql/data
@@ -16,6 +18,34 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+
+  api:
+    build: .
+    container_name: ilkapi-api
+    restart: unless-stopped
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+
+      # Ortam degiskeninde ':' kullanilamaz (bircok kabukta gecersiz).
+      # .NET'te '__' (iki alt cizgi) hiyerarsi ayraci olarak ':' yerine gecer:
+      #   ConnectionStrings__Varsayilan  ->  ConnectionStrings:Varsayilan
+      #   Jwt__Anahtar                   ->  Jwt:Anahtar
+      #
+      # 'Host=veritabani': container icinde 'localhost' CONTAINER'IN KENDISIDIR.
+      # Compose ayni aga koydugu servisleri servis adiyla cozer.
+      ConnectionStrings__Varsayilan: "Host=veritabani;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}"
+
+      Jwt__Anahtar: ${JWT_ANAHTAR}
+      Jwt__Yayinci: ${JWT_YAYINCI}
+      Jwt__Hedef: ${JWT_HEDEF}
+    ports:
+      # host:container — icerideki 8080, disarida 8080
+      - "8080:8080"
+    depends_on:
+      veritabani:
+        # 'service_started' YETMEZ: container ayakta olmak != Postgres hazir olmak.
+        # Faz 6'da yazilan healthcheck'in asil karsiligi bu satir.
+        condition: service_healthy
 
 volumes:
   pgveri:

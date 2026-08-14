@@ -58,14 +58,44 @@ builder.Services.AddAuthorization();
 builder.Services.AddExceptionHandler<GlobalHataYakalayici>();
 builder.Services.AddProblemDetails();
 
+// Disaridan "ayakta misin" sorusuna cevap verecek uc.
+// Container orkestratorlerinin (compose, K8s) uygulamanin hazir olup olmadigini
+// anlamasinin standart yolu budur.
+builder.Services.AddHealthChecks();
+builder.Services.AddOpenApi();
+
 var app = builder.Build();
+
+// Container'da 'dotnet ef' yoktur (SDK imaji calisma asamasina gecmiyor),
+// bu yuzden bekleyen migration'lar acilista uygulanir.
+// DbContext Scoped kayitlidir; acilista HTTP istegi -> kapsam olmadigi icin
+// kapsam elle olusturulur.
+// EF Core bu islem sirasinda __EFMigrationsHistory tablosunu kilitler
+// (LOCK TABLE ... ACCESS EXCLUSIVE MODE), yani es zamanli kalkan kopyalar
+// ayni migration'i iki kez uygulamaz.
+// KALAN SINIR kilit degil, DAGITIM: eski ve yeni surum bir sure birlikte
+// calisirken sema degisikligi eski surumu bozabilir. Cozum geriye donuk uyumlu
+// migration yazmak; buyudukce bu adim CI/CD'de ayri bir ise tasinir.
+using (var kapsam = app.Services.CreateScope())
+{
+    var db = kapsam.ServiceProvider.GetRequiredService<UygulamaDbContext>();
+    await db.Database.MigrateAsync();
+}
 
 app.UseExceptionHandler();
 
 app.UseAuthentication();
 app.UseAuthorization();
 
+// Kimlik dogrulama GEREKTIRMEZ: saglik kontrolu token bilmez.
+app.MapHealthChecks("/saglik");
+
 app.AuthEndpointleriniEkle();
 app.OyunEndpointleriniEkle();
+
+if (app.Environment.IsDevelopment())
+{
+    app.MapOpenApi();
+}
 
 app.Run();

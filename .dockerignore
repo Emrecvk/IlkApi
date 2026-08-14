@@ -1,0 +1,27 @@
+# Derleme ciktilari.
+# EN KRITIK SATIRLAR BUNLAR: host'ta Linux/WSL icin uretilmis obj/ ve bin/
+# imaja kopyalanirsa, container icindeki restore ciktisinin uzerine yazar ve
+# "benim kodumda olmayan" hatalar uretir.
+bin/
+obj/
+
+# Versiyon kontrolu ve editor ayarlari imajda ise yaramaz, sadece sisirir.
+.git/
+.gitignore
+.gitattributes
+.vscode/
+
+# GIZLI BILGI. Imaja giren her sey, imaji cekebilen herkes tarafindan okunabilir.
+.env
+.env.example
+*.user
+
+# Belgeler ve artiklar
+*.md
+*:Zone.Identifier
+
+# Docker dosyalarinin kendisi imajin icinde bulunmaz
+Dockerfile
+.dockerignore
+compose.yaml
+compose.*.yaml

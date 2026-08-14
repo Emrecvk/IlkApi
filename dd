@@ -1,0 +1,47 @@
+[1mdiff --git a/compose.yaml b/compose.yaml[m
+[1mindex 9275292..b7b1547 100644[m
+[1m--- a/compose.yaml[m
+[1m+++ b/compose.yaml[m
+[36m@@ -8,6 +8,8 @@[m [mservices:[m
+       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}[m
+       POSTGRES_DB: ${POSTGRES_DB}[m
+     ports:[m
+[32m+[m[32m      # Host'a aciliyor cunku 'dotnet ef' ve psql disaridan baglaniyor.[m
+[32m+[m[32m      # Uygulama artik buna ihtiyac duymuyor: container agi uzerinden konusuyor.[m
+       - "5432:5432"[m
+     volumes:[m
+       - pgveri:/var/lib/postgresql/data[m
+[36m@@ -17,5 +19,33 @@[m [mservices:[m
+       timeout: 5s[m
+       retries: 5[m
+ [m
+[32m+[m[32m  api:[m
+[32m+[m[32m    build: .[m
+[32m+[m[32m    container_name: ilkapi-api[m
+[32m+[m[32m    restart: unless-stopped[m
+[32m+[m[32m    environment:[m
+[32m+[m[32m      ASPNETCORE_ENVIRONMENT: Production[m
+[32m+[m
+[32m+[m[32m      # Ortam degiskeninde ':' kullanilamaz (bircok kabukta gecersiz).[m
+[32m+[m[32m      # .NET'te '__' (iki alt cizgi) hiyerarsi ayraci olarak ':' yerine gecer:[m
+[32m+[m[32m      #   ConnectionStrings__Varsayilan  ->  ConnectionStrings:Varsayilan[m
+[32m+[m[32m      #   Jwt__Anahtar                   ->  Jwt:Anahtar[m
+[32m+[m[32m      #[m
+[32m+[m[32m      # 'Host=veritabani': container icinde 'localhost' CONTAINER'IN KENDISIDIR.[m
+[32m+[m[32m      # Compose ayni aga koydugu servisleri servis adiyla cozer.[m
+[32m+[m[32m      ConnectionStrings__Varsayilan: "Host=veritabani;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}"[m
+[32m+[m
+[32m+[m[32m      Jwt__Anahtar: ${JWT_ANAHTAR}[m
+[32m+[m[32m      Jwt__Yayinci: ${JWT_YAYINCI}[m
+[32m+[m[32m      Jwt__Hedef: ${JWT_HEDEF}[m
+[32m+[m[32m    ports:[m
+[32m+[m[32m      # host:container — icerideki 8080, disarida 8080[m
+[32m+[m[32m      - "8080:8080"[m
+[32m+[m[32m    depends_on:[m
+[32m+[m[32m      veritabani:[m
+[32m+[m[32m        # 'service_started' YETMEZ: container ayakta olmak != Postgres hazir olmak.[m
+[32m+[m[32m        # Faz 6'da yazilan healthcheck'in asil karsiligi bu satir.[m
+[32m+[m[32m        condition: service_healthy[m
+[32m+[m
+ volumes:[m
+   pgveri:[m

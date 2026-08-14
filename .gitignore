@@ -484,3 +484,4 @@ $RECYCLE.BIN/
 
 # Windows indirme artiklari
 *:Zone.Identifier
+appsettings.Development.json

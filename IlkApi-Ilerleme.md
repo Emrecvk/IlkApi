@@ -1,6 +1,6 @@
 # IlkApi — Proje Durumu ve Öğrenme Günlüğü
 
-**Son güncelleme:** 14 Ağustos 2026 (Faz 5.5 — sağlamlaştırma)
+**Son güncelleme:** 14 Ağustos 2026 (Faz 5.5 sağlamlaştırma + Faz 6 tamamlandı)
 **Geliştirici:** Emre Çevik
 **Repo:** `git@github.com:Emrecvk/IlkApi.git`
 
@@ -114,8 +114,11 @@ Amaç: backend fundamentals'ı sıfırdan, gerçek bir proje üzerinde öğrenme
 IlkApi/
 ├── IlkApi.csproj
 ├── Program.cs                  # DI kayıtları + middleware + endpoint bağlama
-├── compose.yaml                # PostgreSQL container tanımı
+├── Dockerfile                  # Multi-stage: SDK ile derle, runtime ile çalıştır
+├── .dockerignore               # bin/, obj/, .env imaja GİRMEZ
+├── compose.yaml                # veritabani + api servisleri
 ├── .env                        # Gizli değerler (gitignore'da)
+├── .env.example                # Anahtar şablonu (Git'e girer)
 ├── .gitignore
 ├── Modeller/
 │   ├── Oyun.cs                 # Veritabanı entity'si
@@ -243,11 +246,26 @@ Faz 5 sonrası kod tarandı; mutlu yolda doğru ama kenar durumlarda hatalı dö
 
 **Kritik bağlantı:** 1 numaralı bulgu Docker'ın ön koşuluydu. Container varsayılan olarak Production'da çalışır ve içinde user-secrets yoktur — düzeltilmeseydi hata "Docker'ı yanlış yaptım" sanılacaktı.
 
-### Faz 6 — Docker (kısmen) 🔄
+### Faz 6 — Docker ✅
 
-PostgreSQL container'a alındı (`compose.yaml`). Uygulamanın kendisi henüz container'da değil.
+PostgreSQL container'a alınmıştı; **uygulamanın kendisi de container'a alındı.** Multi-stage `Dockerfile`, `.dockerignore`, compose'da `api` servisi, `.env` tek kaynak, Production ortamı.
 
-**Öğrenilenler:**
+**Sonuç:** `docker compose up -d` → veritabanı sağlıklı olmadan API başlamıyor, migration'lar açılışta uygulanıyor, uygulama `http://localhost:8080` üzerinde Production'da çalışıyor.
+
+**Öğrenilenler (uygulama container'ı):**
+- **Multi-stage build:** SDK imajı (1.26 GB) ile derle, sonuç imajı runtime'dan (349 MB) türet. Sonuç: **361 MB**. Küçüklük sadece disk değil — *imajda olmayan derleyici, saldırganın kullanamayacağı derleyicidir*
+- **Katman önbelleği ve COPY sırası:** önce `.csproj` + `restore`, sonra `COPY . .`. Kod değişince `restore` önbellekten gelir. Ölçüldü: 16.2 sn → **4.2 sn**
+- **Docker içeriği hash'ler, tarihi değil.** `touch` ile önbellek bozulmaz
+- **`.dockerignore` Dockerfile'dan önce yazılır.** Yoksa host'un `bin/` ve `obj/` klasörleri imaja girip container içindeki restore çıktısının üstüne yazar → 6 numaralı hatanın container versiyonu
+- **Container varsayılan olarak root çalışır.** .NET imajları hazır `app` kullanıcısı (uid 1654) tanımlar → `USER $APP_UID`
+- **8080, 80 değil.** .NET 8'den beri container imajları 8080 dinler: ayrıcalıksız kullanıcı 1024 altındaki portlara bağlanamaz
+- **Ortam değişkeninde `:` yerine `__`:** `ConnectionStrings__Varsayilan` → `ConnectionStrings:Varsayilan`. Sebep: birçok kabukta `:` geçersiz
+- **Container içinde `localhost` container'ın kendisidir.** Compose aynı ağdaki servisleri **servis adıyla** çözer → `Host=veritabani`
+- **`depends_on: condition: service_healthy`** — Faz 6'nın ilk yarısında yazılan healthcheck'in asıl karşılığı. `service_started` yetmez
+- **Migration container'da `dotnet ef` ile yapılamaz** (SDK yok) → açılışta `MigrateAsync()`. DbContext Scoped olduğu için elle `CreateScope()` gerekir (açılışta HTTP isteği → kapsam yoktur)
+- **Minimal imajın bedeli:** `curl`, `wget`, `nc` yok. Bu yüzden `api` servisine compose healthcheck'i konmadı. Doğru çözüm imaja curl kurmak değil, **orkestratörün HTTP probe'u** (K8s bunu dışarıdan yapar). `/saglik` ucu bunun için var
+
+**Öğrenilenler (Faz 6'nın ilk yarısı — veritabanı container'ı):**
 - **Container ≠ VM:** container host kernel'ini paylaşır (namespace + cgroup ile izolasyon), VM'in kendi kernel'i vardır
 - **Volume:** container dosya sistemi geçicidir, volume kalıcıdır → *durumsuz uygulama, durumlu depolama*. Faz 2'de öğrenilen ayrımın altyapı karşılığı
 - `restart: unless-stopped` → `sudo service postgresql start` derdi bitti
@@ -280,6 +298,9 @@ Bu bölüm en değerli kısım — hata ayıklama refleksleri burada oluştu.
 | 12 | Bir endpoint 500, kardeşi 400 | `/giris`'e doğrulama filtresi eklenmemiş | **Kardeş endpoint'leri yan yana oku.** Fark varsa gerekçesi olmalı; yoksa unutulmuştur |
 | 13 | Durum kodları aynı, süreler 75× farklı | Kullanıcı yokken pahalı hash işlemi atlanıyor | Güvenlik testinde **yalnızca cevabı değil, cevabın maliyetini de** ölç |
 | 14 | Eşzamanlı isteklerde 409 yerine 500 | Unique ihlali istisna olarak yakalanmıyor | Tek istekle test etmek yetmez; **eşzamanlılığı bilerek tetikle** (`&` + `wait`) |
+| 15 | `touch` sonrası Docker her katmanı önbellekten aldı | Docker dosya tarihine değil **içeriğe** bakar | Önbellek davranışını test ederken gerçek içerik değiştir |
+| 16 | Container loglarında `Cannot load library libgssapi_krb5.so.2` | Npgsql Kerberos kütüphanesini arıyor, minimal imajda yok | **Kırmızı satır ≠ hata.** Npgsql bunu yutup devam ediyor; akışın sonucuna bak (1 numaralı prensip) |
+| 17 | `curl`, `wget`, `nc` container içinde yok | Runtime imajı kasten minimal | Aracı imaja eklemeden önce sor: bu iş **imajın içinde mi** yapılmalı? |
 
 ### Genel hata ayıklama prensipleri
 
@@ -294,10 +315,20 @@ Bu bölüm en değerli kısım — hata ayıklama refleksleri burada oluştu.
 ## Sık Kullanılan Komutlar
 
 ### Günlük akış
+
+İki mod var, ikisi de gecerli:
+
 ```bash
+# GELISTIRME: veritabani container'da, uygulama host'ta (hizli geri bildirim)
 cd ~/projeler/IlkApi
-docker compose up -d          # veritabanini kaldir
-dotnet watch run              # uygulamayi izleme modunda calistir
+docker compose up -d veritabani
+dotnet watch run                     # http://localhost:5144 — Development
+```
+
+```bash
+# URETIME BENZER: her sey container'da
+docker compose up -d --build         # http://localhost:8080 — Production
+docker compose logs -f api
 ```
 
 ### .NET
@@ -327,6 +358,16 @@ docker compose down                # container'lari durdur (VERI KALIR)
 docker compose down -v             # volume'leri de sil (VERI GIDER — dikkat)
 docker exec -it ilkapi-db psql -U emre -d oyunkutuphanesi
 docker volume ls
+
+# Imaj ve build
+docker compose build api           # imaji yeniden derle
+docker images | grep ilkapi        # boyutu gor
+docker compose exec api id         # hangi kullanici calisiyor (root olmamali)
+docker history ilkapi-api:latest   # katmanlari ve boyutlarini gor
+
+# Imajin ICINE bak (uygulamayi calistirmadan)
+docker run --rm --entrypoint sh ilkapi-api:latest -c 'ls /uygulama'
+docker run --rm --entrypoint sh ilkapi-api:latest -c 'find / -name ".env" 2>/dev/null'
 ```
 
 ### Gizli bilgi
@@ -385,7 +426,7 @@ ASPNETCORE_ENVIRONMENT=Production dotnet run
 
 **Güvenlik:** hash vs şifreleme, salt, BCrypt, JWT, claim, bearer token, kullanıcı numaralandırma, yan kanal (timing attack), defense in depth, gizli bilgi yönetimi, bağımlılık açığı (CVE)
 
-**Docker:** imaj, container, katman, volume, bind mount, namespace, cgroup, Compose, healthcheck, port eşleme, registry
+**Docker:** imaj, container, katman, volume, bind mount, namespace, cgroup, Compose, healthcheck, port eşleme, registry, multi-stage build, katman önbelleği, build context, `.dockerignore`, `depends_on` koşulu, container ağı ve servis adı çözümlemesi, ayrıcalıksız kullanıcı (`USER`), `ENTRYPOINT`
 
 **Mimari:** katmanlı mimari, DTO, Dependency Inversion, refactoring, stateless/stateful, Infrastructure as Code
 
@@ -394,10 +435,18 @@ ASPNETCORE_ENVIRONMENT=Production dotnet run
 ## Sıradaki Adımlar
 
 ### Hemen sırada
-1. **Uygulamayı container'a al** — Dockerfile, multi-stage build (SDK ile derle, runtime ile çalıştır), imaj katmanları
-2. **Container ağı** — connection string `localhost` olmaktan çıkacak, servis adı (`veritabani`) kullanılacak. Container içinden `localhost` container'ın kendisidir
-3. **`.env` ile tek kaynak** — compose ve uygulama aynı değerleri okusun
-4. **Ortam ayrımı** — `ASPNETCORE_ENVIRONMENT`, Development vs Production davranış farkı. Production'da gizli bilgi ortam değişkeninden gelecek (user-secrets orada yok — Faz 5.5 / bulgu 1 bunu kanıtladı)
+1. ~~Uygulamayı container'a al~~ ✅
+2. ~~Container ağı — servis adıyla bağlantı~~ ✅
+3. ~~`.env` ile tek kaynak~~ ✅
+4. ~~Ortam ayrımı — `ASPNETCORE_ENVIRONMENT`~~ ✅
+5. **Bir uygulamayı elle VPS'e at** — DevOps merdiveninin atlanan 3. basamağı. Artık container hazır olduğu için deploy da anlamlı (Hetzner ~€4/ay veya Oracle free tier)
+6. **Testler** — birim testi + Testcontainers ile entegrasyon testi. Faz 5.5'te elle `curl` ile bulunan dört hata, artık **otomatik testle** sabitlenmeli
+
+### Faz 6 sonrası bilerek bırakılan borçlar
+- `api` servisinde compose healthcheck yok (imajda HTTP istemcisi yok — orkestratör işi)
+- İmaj etiketi `10.0` (patch sürümüne veya digest'e sabitlenmedi)
+- DataProtection anahtarları container ile birlikte yok oluyor — tek kopyada sorun değil, ölçeklenince volume/Redis gerekir
+- Migration açılışta uygulanıyor — geriye dönük uyumlu şema değişikliği disiplini gerekiyor
 
 ### Yakın vadede
 - Testler: birim testi + Testcontainers ile entegrasyon testi
@@ -412,7 +461,7 @@ ASPNETCORE_ENVIRONMENT=Production dotnet run
 2. ~~Git~~ ✅
 3. **Bir uygulamayı elle VPS'e at** ← atlandı, geri dönülmeli (Hetzner ~€4/ay veya Oracle free tier)
 4. Nginx/Caddy + TLS + systemd service
-5. ~~Docker~~ 🔄 (yarısı bitti)
+5. ~~Docker~~ ✅ (veritabanı + uygulama, multi-stage, compose)
 6. CI/CD: GitHub Actions — push'ta test + build + deploy
 7. Observability: yapılandırılmış log, Prometheus + Grafana
 8. IaC: Terraform + Ansible
