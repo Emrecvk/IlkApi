@@ -1,5 +1,7 @@
+using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 using IlkApi.Endpointler;
+using IlkApi.Ortak;
 using IlkApi.Servisler;
 using IlkApi.Veri;
 
@@ -10,7 +12,14 @@ builder.Services.AddDbContext<UygulamaDbContext>(secenekler =>
 
 builder.Services.AddScoped<IOyunServisi, OyunServisi>();
 
+builder.Services.AddValidatorsFromAssemblyContaining<Program>();
+
+builder.Services.AddExceptionHandler<GlobalHataYakalayici>();
+builder.Services.AddProblemDetails();
+
 var app = builder.Build();
+
+app.UseExceptionHandler();
 
 app.OyunEndpointleriniEkle();
 

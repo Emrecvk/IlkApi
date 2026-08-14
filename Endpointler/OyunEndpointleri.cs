@@ -1,5 +1,6 @@
 using IlkApi.Dto;
 using IlkApi.Servisler;
+using IlkApi.Ortak;
 
 namespace IlkApi.Endpointler;
 
@@ -19,13 +20,11 @@ public static class OyunEndpointleri
         });
 
         grup.MapPost("/", async (OyunYaz girdi, IOyunServisi servis) =>
-        {
-            if (string.IsNullOrWhiteSpace(girdi.Ad))
-                return Results.BadRequest("Ad bos olamaz.");
-
-            var yeni = await servis.EkleAsync(girdi);
-            return Results.Created($"/api/oyunlar/{yeni.Id}", yeni);
-        });
+{
+    var yeni = await servis.EkleAsync(girdi);
+    return Results.Created($"/api/oyunlar/{yeni.Id}", yeni);
+})
+.AddEndpointFilter<DogrulamaFiltresi<OyunYaz>>();
 
         grup.MapDelete("/{id:int}", async (int id, IOyunServisi servis) =>
         {
