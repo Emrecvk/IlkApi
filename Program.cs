@@ -1,6 +1,8 @@
 using System.Text;
 using FluentValidation;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using IlkApi.Dto;
 using IlkApi.Dto.Dogrulayicilar;
@@ -20,21 +22,33 @@ builder.Services.AddSingleton<ITokenServisi, TokenServisi>();
 
 builder.Services.AddScoped<IValidator<OyunYaz>, OyunYazDogrulayici>();
 builder.Services.AddScoped<IValidator<KayitIstek>, KayitIstekDogrulayici>();
+builder.Services.AddScoped<IValidator<GirisIstek>, GirisIstekDogrulayici>();
 
-builder.Services.AddAuthentication("Bearer")
-    .AddJwtBearer(secenekler =>
+// Ayarlar bir sinifa baglanir ve UYGULAMA ACILIRKEN dogrulanir.
+// Eksik/gecersiz konfigurasyon ilk istekte degil, basta patlar (fail-fast).
+builder.Services.AddOptions<JwtAyarlari>()
+    .Bind(builder.Configuration.GetSection(JwtAyarlari.Bolum))
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
+
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer();
+
+// JwtBearer secenekleri dogrulanmis ayarlardan beslenir; konfigurasyon tek yerden okunur.
+builder.Services.AddOptions<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme)
+    .Configure<IOptions<JwtAyarlari>>((bearerSecenekleri, jwtSecenek) =>
     {
-        var anahtar = builder.Configuration["Jwt:Anahtar"]!;
+        var ayarlar = jwtSecenek.Value;
 
-        secenekler.TokenValidationParameters = new TokenValidationParameters
+        bearerSecenekleri.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuer = true,
             ValidateAudience = true,
             ValidateLifetime = true,
             ValidateIssuerSigningKey = true,
-            ValidIssuer = builder.Configuration["Jwt:Yayinci"],
-            ValidAudience = builder.Configuration["Jwt:Hedef"],
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(anahtar)),
+            ValidIssuer = ayarlar.Yayinci,
+            ValidAudience = ayarlar.Hedef,
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(ayarlar.Anahtar)),
             ClockSkew = TimeSpan.FromSeconds(30)
         };
     });

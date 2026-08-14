@@ -25,6 +25,7 @@ public static class AuthEndpointleri
             return sonuc is null
                 ? Results.Unauthorized()
                 : Results.Ok(sonuc);
-        });
+        })
+        .AddEndpointFilter<DogrulamaFiltresi<GirisIstek>>();
     }
 }

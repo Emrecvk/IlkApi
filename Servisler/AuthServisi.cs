@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using IlkApi.Dto;
 using IlkApi.Modeller;
 using IlkApi.Veri;
@@ -7,6 +8,11 @@ namespace IlkApi.Servisler;
 
 public class AuthServisi : IAuthServisi
 {
+    // Kullanici bulunamadiginda da BCrypt calistirilir ki yanit suresi degismesin.
+    // Ayni maliyet katsayisiyla uretilmis olmasi sart, aksi halde fark yine olculur.
+    private static readonly string SahteHash =
+        BCrypt.Net.BCrypt.HashPassword("zamanlama-farkini-kapatan-yer-tutucu");
+
     private readonly UygulamaDbContext _db;
     private readonly ITokenServisi _tokenServisi;
 
@@ -30,7 +36,19 @@ public class AuthServisi : IAuthServisi
         };
 
         _db.Kullanicilar.Add(kullanici);
-        await _db.SaveChangesAsync();
+
+        try
+        {
+            await _db.SaveChangesAsync();
+        }
+        // Yukaridaki kontrol ile bu satir arasinda baska bir istek ayni epostayi
+        // eklemis olabilir. Unique index veriyi korur; burada da dogru cevaba cevrilir.
+        // Sadece unique ihlali yakalanir: diger veritabani hatalari gizlenmemeli.
+        catch (DbUpdateException hata)
+            when (hata.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
+        {
+            return null;
+        }
 
         var (token, sona) = _tokenServisi.Uret(kullanici);
         return new TokenYanit(token, sona);
@@ -43,10 +61,10 @@ public class AuthServisi : IAuthServisi
         var kullanici = await _db.Kullanicilar
             .FirstOrDefaultAsync(k => k.Eposta == eposta);
 
-        if (kullanici is null) return null;
+        // Kullanici yoksa bile dogrulama yapilir; erken donus zamanlama sizintisi olurdu.
+        var dogruMu = BCrypt.Net.BCrypt.Verify(istek.Sifre, kullanici?.SifreHash ?? SahteHash);
 
-        var dogruMu = BCrypt.Net.BCrypt.Verify(istek.Sifre, kullanici.SifreHash);
-        if (!dogruMu) return null;
+        if (kullanici is null || !dogruMu) return null;
 
         var (token, sona) = _tokenServisi.Uret(kullanici);
         return new TokenYanit(token, sona);

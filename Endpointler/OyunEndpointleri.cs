@@ -20,17 +20,18 @@ public static class OyunEndpointleri
         });
 
         grup.MapPost("/", async (OyunYaz girdi, IOyunServisi servis) =>
-{
-    var yeni = await servis.EkleAsync(girdi);
-    return Results.Created($"/api/oyunlar/{yeni.Id}", yeni);
-})
-.AddEndpointFilter<DogrulamaFiltresi<OyunYaz>>()
-.RequireAuthorization();
+        {
+            var yeni = await servis.EkleAsync(girdi);
+            return Results.Created($"/api/oyunlar/{yeni.Id}", yeni);
+        })
+        .AddEndpointFilter<DogrulamaFiltresi<OyunYaz>>()
+        .RequireAuthorization();
 
-grup.MapDelete("/{id:int}", async (int id, IOyunServisi servis) =>
-{
-    var silindi = await servis.SilAsync(id);
-    return silindi ? Results.NoContent() : Results.NotFound();
-})
-.RequireAuthorization();
-}}
+        grup.MapDelete("/{id:int}", async (int id, IOyunServisi servis) =>
+        {
+            var silindi = await servis.SilAsync(id);
+            return silindi ? Results.NoContent() : Results.NotFound();
+        })
+        .RequireAuthorization();
+    }
+}

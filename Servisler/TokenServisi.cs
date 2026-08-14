@@ -1,26 +1,25 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using IlkApi.Modeller;
+using IlkApi.Ortak;
 
 namespace IlkApi.Servisler;
 
 public class TokenServisi : ITokenServisi
 {
-    private readonly IConfiguration _yapilandirma;
+    private readonly JwtAyarlari _ayarlar;
 
-    public TokenServisi(IConfiguration yapilandirma)
+    public TokenServisi(IOptions<JwtAyarlari> ayarlar)
     {
-        _yapilandirma = yapilandirma;
+        _ayarlar = ayarlar.Value;
     }
 
     public (string Token, DateTime GecerlilikSonu) Uret(Kullanici kullanici)
     {
-        var anahtar = _yapilandirma["Jwt:Anahtar"]
-            ?? throw new InvalidOperationException("Jwt:Anahtar tanimli degil.");
-
-        var gecerlilikSonu = DateTime.UtcNow.AddHours(1);
+        var gecerlilikSonu = DateTime.UtcNow.AddMinutes(_ayarlar.GecerlilikDakika);
 
         var talepler = new[]
         {
@@ -29,12 +28,12 @@ public class TokenServisi : ITokenServisi
             new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
         };
 
-        var imzalamaAnahtari = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(anahtar));
+        var imzalamaAnahtari = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_ayarlar.Anahtar));
         var kimlikBilgisi = new SigningCredentials(imzalamaAnahtari, SecurityAlgorithms.HmacSha256);
 
         var token = new JwtSecurityToken(
-            issuer: _yapilandirma["Jwt:Yayinci"],
-            audience: _yapilandirma["Jwt:Hedef"],
+            issuer: _ayarlar.Yayinci,
+            audience: _ayarlar.Hedef,
             claims: talepler,
             expires: gecerlilikSonu,
             signingCredentials: kimlikBilgisi);

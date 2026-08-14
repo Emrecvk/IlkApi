@@ -1,6 +1,6 @@
 # IlkApi — Proje Durumu ve Öğrenme Günlüğü
 
-**Son güncelleme:** 14 Ağustos 2026
+**Son güncelleme:** 14 Ağustos 2026 (Faz 5.5 — sağlamlaştırma)
 **Geliştirici:** Emre Çevik
 **Repo:** `git@github.com:Emrecvk/IlkApi.git`
 
@@ -127,7 +127,8 @@ IlkApi/
 │   ├── AuthDto.cs              # KayitIstek, GirisIstek, TokenYanit
 │   └── Dogrulayicilar/
 │       ├── OyunYazDogrulayici.cs
-│       └── KayitIstekDogrulayici.cs
+│       ├── KayitIstekDogrulayici.cs
+│       └── GirisIstekDogrulayici.cs
 ├── Servisler/
 │   ├── IOyunServisi.cs / OyunServisi.cs
 │   ├── IAuthServisi.cs / AuthServisi.cs
@@ -137,6 +138,7 @@ IlkApi/
 │   └── AuthEndpointleri.cs
 ├── Ortak/
 │   ├── HataYaniti.cs
+│   ├── JwtAyarlari.cs          # Options deseni + acilista dogrulama
 │   ├── DogrulamaFiltresi.cs    # Generic IEndpointFilter
 │   └── GlobalHataYakalayici.cs # IExceptionHandler
 └── Migrations/
@@ -216,6 +218,31 @@ Kullanıcı modeli, BCrypt hashleme, JWT üretimi ve doğrulaması, `RequireAuth
 
 **Bilerek eksik bırakılanlar:** refresh token, brute-force koruması (rate limit), eposta doğrulama, şifre sıfırlama, rol tabanlı yetkilendirme.
 
+### Faz 5.5 — Sağlamlaştırma ✅
+
+Faz 5 sonrası kod tarandı; mutlu yolda doğru ama kenar durumlarda hatalı dört nokta bulundu, **hepsi ölçülerek kanıtlandı ve düzeltildi.**
+
+| # | Belirti (ölçülen) | Kök sebep | Düzeltme |
+|---|---|---|---|
+| 1 | Production'da **her istek 500** | user-secrets sadece Development'ta yüklenir; `Jwt:Anahtar` null; `!` operatörü uyarıyı sustururken kontrol sağlamıyor | `JwtAyarlari` + `ValidateDataAnnotations().ValidateOnStart()` |
+| 2 | `POST /giris {}` → 500 | `/giris`'te doğrulama filtresi yok; `Eposta` null gelip `.Trim()` patlıyor | `GirisIstekDogrulayici` + filtre |
+| 3 | Giriş süresi: var olan kullanıcı **175 ms**, olmayan **2.3 ms** (75×) | Kullanıcı yoksa `BCrypt.Verify` hiç çağrılmıyor | Kullanıcı yokken sabit sahte hash'e karşı doğrulama |
+| 4 | 8 eşzamanlı aynı kayıt → 1×200, **7×500** | Unique ihlali `DbUpdateException` olarak yakalanmıyor | `catch (DbUpdateException) when (... UniqueViolation)` → 409 |
+
+**Doğrulama sonrası:** 1 → açılışta net mesajla durur, 2 → 400 + alan bazlı mesaj, 3 → süreler iç içe, 4 → 1×200 + 7×409.
+
+**Öğrenilenler:**
+- **`!` bir kontrol değil, derleyiciye verilen sözdür.** Tutulup tutulmadığına kimse bakmaz
+- **Nullable referans tipleri yalnızca derleme zamanı özelliğidir.** JSON deserializer `string` alana rahatça null yazar — tip, gelen veriyi garanti etmez
+- **Fail-fast:** hatayı ilk isteğe değil açılışa çek. `AddJwtBearer(lambda)` tembeldir; "uygulama ayağa kalktı" ≠ "konfigürasyon sağlam"
+- **Options deseni:** ayarı kullanıldığı yerde okumak yerine sınıfa bağla, sınırda bir kez doğrula (Faz 4'teki "doğrulama sınırda yapılır" ilkesinin konfigürasyon karşılığı)
+- **Yan kanal (side channel):** bilgi cevabın içeriğinden değil, cevabı üretme sürecinden sızabilir. Durum kodu aynı olsa da kronometre konuşur
+- **Defense in depth iki yönlü çalışmalı:** unique index veriyi korudu ama API yanlış cevap verdi. İkinci katman devreye girdiğinde de sözleşmeye uyulmalı
+- **`when` ile dar yakala:** tüm `DbUpdateException`'ları 409'a çevirmek foreign key / bağlantı hatalarını gizler
+- **Giriş doğrulamasında şifre politikası tekrarlanmaz** — politika değişince eski şifreli kullanıcılar kilitlenir
+
+**Kritik bağlantı:** 1 numaralı bulgu Docker'ın ön koşuluydu. Container varsayılan olarak Production'da çalışır ve içinde user-secrets yoktur — düzeltilmeseydi hata "Docker'ı yanlış yaptım" sanılacaktı.
+
 ### Faz 6 — Docker (kısmen) 🔄
 
 PostgreSQL container'a alındı (`compose.yaml`). Uygulamanın kendisi henüz container'da değil.
@@ -249,6 +276,10 @@ Bu bölüm en değerli kısım — hata ayıklama refleksleri burada oluştu.
 | 8 | `CS1061: DbContext does not contain 'Oyunlar'` | DbContext düzenlenirken mevcut `DbSet` üzerine yazıldı | Hata mesajındaki **tipe** git, bahsedilen üyeyi ara |
 | 9 | VS Code "No .NET SDKs were found" | VS Code Windows tarafında çalışıyordu, WSL'e bağlı değildi | **Yollara bak:** `C:\...` → Windows süreci, `/home/...` → Linux süreci. Karıştıysa yapılandırma yanlış |
 | 10 | `28P01: password authentication failed` | user-secrets'ta `1234`, compose'da `gizli123` | Aynı değer iki yerde tanımlıysa er geç ayrışır → `.env` ile tek kaynak |
+| 11 | Production'da her istek 500, Development'ta sorunsuz | user-secrets Development'a özel; `!` ile null uyarısı susturulmuş | **Ortamı değiştir, tekrar dene.** "Bende çalışıyor" bir kanıt değil, bir ortam ifadesidir |
+| 12 | Bir endpoint 500, kardeşi 400 | `/giris`'e doğrulama filtresi eklenmemiş | **Kardeş endpoint'leri yan yana oku.** Fark varsa gerekçesi olmalı; yoksa unutulmuştur |
+| 13 | Durum kodları aynı, süreler 75× farklı | Kullanıcı yokken pahalı hash işlemi atlanıyor | Güvenlik testinde **yalnızca cevabı değil, cevabın maliyetini de** ölç |
+| 14 | Eşzamanlı isteklerde 409 yerine 500 | Unique ihlali istisna olarak yakalanmıyor | Tek istekle test etmek yetmez; **eşzamanlılığı bilerek tetikle** (`&` + `wait`) |
 
 ### Genel hata ayıklama prensipleri
 
@@ -321,6 +352,21 @@ curl -i -X POST http://localhost:5144/api/oyunlar \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"ad":"Celeste","cikisYili":2018,"bitirdim":false}'
+
+# Sadece SUREYI olc (yan kanal testi)
+curl -s -o /dev/null -w "%{time_total} sn\n" -X POST http://localhost:5144/api/auth/giris \
+  -H "Content-Type: application/json" -d '{"eposta":"yok@ornek.com","sifre":"yanlis123"}'
+
+# ESZAMANLI istek (yaris durumu testi): & ile arka plana at, wait ile bekle
+for i in $(seq 1 8); do
+  curl -s -o /dev/null -w "%{http_code}\n" -X POST http://localhost:5144/api/auth/kayit \
+    -H "Content-Type: application/json" \
+    -d '{"eposta":"yaris@ornek.com","sifre":"uzunbirsifre123"}' >> /tmp/yaris.txt &
+done
+wait; sort /tmp/yaris.txt | uniq -c
+
+# Production davranisini yerelde gor (user-secrets YUKLENMEZ)
+ASPNETCORE_ENVIRONMENT=Production dotnet run
 ```
 
 ---
@@ -331,13 +377,13 @@ curl -i -X POST http://localhost:5144/api/oyunlar \
 
 **Git / SSH:** repository, commit, branch, remote, asimetrik şifreleme, Ed25519, `known_hosts`, `.gitignore`
 
-**.NET:** SDK vs runtime, LTS, `.csproj`, NuGet, ASP.NET Core, Kestrel, Minimal API, middleware, Dependency Injection, top-level statements, `record`, serileştirme, source generator, extension method, generic
+**.NET:** SDK vs runtime, LTS, `.csproj`, NuGet, ASP.NET Core, Kestrel, Minimal API, middleware, Dependency Injection, top-level statements, `record`, serileştirme, source generator, extension method, generic, Options deseni (`IOptions<T>`), fail-fast / `ValidateOnStart`, null-forgiving operatörü (`!`), exception filter (`catch ... when`), ortam (`ASPNETCORE_ENVIRONMENT`)
 
 **Web / HTTP:** GET/POST/PUT/DELETE, durum kodları (200/201/204/400/401/403/404/409/500), endpoint, route, route constraint, model binding, JSON, REST, OpenAPI, CORS, localhost/port
 
 **Veritabanı:** ORM, DbContext, DbSet, migration, connection string, birincil anahtar, unique index, projeksiyon, race condition, transaction
 
-**Güvenlik:** hash vs şifreleme, salt, BCrypt, JWT, claim, bearer token, kullanıcı numaralandırma, gizli bilgi yönetimi, bağımlılık açığı (CVE)
+**Güvenlik:** hash vs şifreleme, salt, BCrypt, JWT, claim, bearer token, kullanıcı numaralandırma, yan kanal (timing attack), defense in depth, gizli bilgi yönetimi, bağımlılık açığı (CVE)
 
 **Docker:** imaj, container, katman, volume, bind mount, namespace, cgroup, Compose, healthcheck, port eşleme, registry
 
@@ -351,7 +397,7 @@ curl -i -X POST http://localhost:5144/api/oyunlar \
 1. **Uygulamayı container'a al** — Dockerfile, multi-stage build (SDK ile derle, runtime ile çalıştır), imaj katmanları
 2. **Container ağı** — connection string `localhost` olmaktan çıkacak, servis adı (`veritabani`) kullanılacak. Container içinden `localhost` container'ın kendisidir
 3. **`.env` ile tek kaynak** — compose ve uygulama aynı değerleri okusun
-4. **Ortam ayrımı** — `ASPNETCORE_ENVIRONMENT`, Development vs Production davranış farkı
+4. **Ortam ayrımı** — `ASPNETCORE_ENVIRONMENT`, Development vs Production davranış farkı. Production'da gizli bilgi ortam değişkeninden gelecek (user-secrets orada yok — Faz 5.5 / bulgu 1 bunu kanıtladı)
 
 ### Yakın vadede
 - Testler: birim testi + Testcontainers ile entegrasyon testi
@@ -426,7 +472,8 @@ Oyuna leaderboard + bulut kayıt senkronu ekle. Tek özellik, ama gerçek bir ba
 ## Güvenlik Notları
 
 - `.env` **asla** Git'e girmez. Yanına `.env.example` konur (aynı anahtarlar, sahte değerler)
-- `compose.yaml` içindeki geliştirme şifresi Git'e gitmiş durumda — kritik değil ama değişkenlere taşınmalı
+- ~~`compose.yaml` içindeki geliştirme şifresi Git'e gitmiş durumda~~ ✅ değişkenlere taşındı; healthcheck de `$$POSTGRES_USER` / `$$POSTGRES_DB` okuyor (compose'da `$$`, kabuğa tek `$` geçirir)
+- **Production'da konfigürasyon eksikse uygulama açılmamalı.** Yarım yapılandırmayla ayağa kalkıp istek başına 500 dönmek, hatayı görünmez kılar (Faz 5.5 / bulgu 1)
 - Production'da user-secrets kullanılmaz; ortam değişkeni veya secret manager devreye girer
 - JWT anahtarını ele geçiren, istediği kullanıcı adına token üretebilir
 - `docker compose down -v` production'da kariyerin en pahalı yazım hatası olabilir
